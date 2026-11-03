@@ -1,0 +1,30 @@
+# macOS metadata
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Cadence / EDA temporary files & logs
+*.log
+*.log*
+*.cmd
+*.cmd*
+*.key
+*.diag
+*.rpt
+*.rep
+*.vcd
+*.shm/
+waves.shm/
+INCA_libs/
+ncsim/
+simvision/
+innovus.log*
+innovus.cmd*
+genus.log*
+genus.cmd*
+
+# Editor backups
+*~
+*.swp
+*.swo
