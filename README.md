@@ -1,7 +1,7 @@
 # Hardware Implementation of Sum of Absolute Differences (SAD) Algorithm in Verilog with Cadence ASIC Physical Design Flow
 
 [![Verilog HDL](https://img.shields.io/badge/Language-Verilog%202001-blue.svg)](https://en.wikipedia.org/wiki/Verilog)
-[![Technology Node](https://img.shields.io/badge/Foundry-90nm%20CMOS%20Digital-red.svg)]()
+[![Technology Node](https://img.shields.io/badge/Library-90nm%20CMOS%20(slow.lib)-red.svg)]()
 [![EDA Tool](https://img.shields.io/badge/Synthesis-Cadence%20Genus%2021.14-orange.svg)]()
 [![EDA Tool](https://img.shields.io/badge/Physical%20Design-Cadence%20Innovus%2021.15-purple.svg)]()
 [![Simulation](https://img.shields.io/badge/Simulation-Cadence%20SimVision-teal.svg)]()
@@ -11,14 +11,14 @@
 
 ## Executive Summary
 
-This repository presents an end-to-end Application-Specific Integrated Circuit (**ASIC**) implementation and physical design flow for the **Sum of Absolute Differences (SAD)** algorithm. The SAD engine is written in synthesizable **Verilog HDL** with fully parameterized matrix dimensions and pixel bit-widths. 
+This repository presents an Application-Specific Integrated Circuit (**ASIC**) implementation and physical design flow for the **Sum of Absolute Differences (SAD)** algorithm. The SAD engine is written in synthesizable **Verilog HDL** with parameterized matrix dimensions and pixel bit-widths. 
 
-The complete RTL-to-GDSII digital implementation flow was executed using Cadence EDA suites:
-- **Behavioral Simulation & Verification**: Cadence SimVision / Incisive
-- **Logic Synthesis & Optimization**: Cadence Genus™ Synthesis Solution (targeting a 90nm standard-cell digital foundry library)
-- **Physical Design (PnR)**: Cadence Innovus™ Implementation System (Floorplanning, Power Distribution Network, Placement, Clock Tree Synthesis, and Detailed Routing)
+The digital implementation flow was executed using Cadence EDA suites:
+- **Behavioral Simulation & Verification**: Cadence SimVision / Incisive (and open-source Icarus Verilog)
+- **Logic Synthesis & Optimization**: Cadence Genus™ Synthesis Solution 21.14 (targeting a 90nm standard-cell digital library: `slow.lib`)
+- **Physical Design (PnR)**: Cadence Innovus™ Implementation System 21.15 (Floorplanning, Power Distribution Network, Placement, Clock Tree Synthesis, and Detailed Routing)
 
-At a constrained clock period of **2.0 ns (500 MHz)**, the design achieved full timing closure with a positive setup slack of **+1422 ps**, consuming **7805.820 µm²** total cell area and **3.086 mW** total power.
+At a constrained clock period of **2.0 ns (500 MHz)**, post-synthesis (pre-layout) analysis in Cadence Genus verified setup timing closure with a positive slack of **+1422 ps**, consuming **7805.820 µm²** total cell area and **3.086 mW** total power (modeled using the slow-corner balanced-tree wireload model).
 
 ---
 
@@ -36,23 +36,25 @@ At a constrained clock period of **2.0 ns (500 MHz)**, the design achieved full 
 - [Functional Verification & Simulation](#functional-verification--simulation)
   - [Testbench Setup](#testbench-setup)
   - [Simulation Waveforms & Analysis](#simulation-waveforms--analysis)
-- [Logic Synthesis (Cadence Genus)](#logic-synthesis-cadence-genus)
+- [Logic Synthesis Results (Cadence Genus — Pre-Layout)](#logic-synthesis-results-cadence-genus--pre-layout)
   - [Synthesis Constraints & Script](#synthesis-constraints--script)
   - [Gate-Level Netlist & Schematics](#gate-level-netlist--schematics)
-  - [Timing Analysis](#timing-analysis)
-  - [Area Utilization](#area-utilization)
-  - [Power Dissipation](#power-dissipation)
+  - [Post-Synthesis Timing Analysis](#post-synthesis-timing-analysis)
+  - [Post-Synthesis Area Utilization](#post-synthesis-area-utilization)
+  - [Post-Synthesis Power Dissipation](#post-synthesis-power-dissipation)
 - [Physical Design & Backend Implementation (Cadence Innovus)](#physical-design--backend-implementation-cadence-innovus)
   - [Floorplanning & Power Grid](#floorplanning--power-grid)
   - [Placement & Clock Tree Synthesis (CTS)](#placement--clock-tree-synthesis-cts)
   - [Detailed Multilayer Routing](#detailed-multilayer-routing)
   - [Layout Visualizations](#layout-visualizations)
-- [Synthesis & Implementation Summary Table](#synthesis--implementation-summary-table)
+- [Post-Synthesis & Implementation Summary Table](#post-synthesis--implementation-summary-table)
+- [Known Limitations](#known-limitations)
 - [Project Directory Structure](#project-directory-structure)
 - [How to Run & Reproduce](#how-to-run--reproduce)
   - [1. RTL Simulation](#1-rtl-simulation)
   - [2. Logic Synthesis in Cadence Genus](#2-logic-synthesis-in-cadence-genus)
   - [3. Physical Design in Cadence Innovus](#3-physical-design-in-cadence-innovus)
+- [Future Improvements](#future-improvements)
 - [References](#references)
 
 ---
@@ -206,23 +208,28 @@ endmodule
 
 ### Bit-Width Sizing & Overflow Prevention
 
-To prevent arithmetic overflow during unrolled accumulation, the output register width is analytically derived:
+To prevent arithmetic overflow during unrolled accumulation, the maximum possible SAD score is:
 
 $$\text{MAX\_SAD} = N^2 \times (2^{\text{WIDTH}} - 1)$$
 
-For default parameters $N = 4$ ($N^2 = 16$) and $\text{WIDTH} = 8$:
+For the default parameters $N = 4$ ($N^2 = 16$) and $\text{WIDTH} = 8$:
 
 $$\text{MAX\_SAD} = 16 \times 255 = 4080$$
 
-The number of bits required to store $4080$ without overflow is:
+The minimum number of bits required to represent $4080$ without overflow is:
 
 $$\lceil \log_2(4080 + 1) \rceil = 12 \text{ bits}$$
 
-The parameterized output width is set to:
+In `RTL/sad.v`, the output register width is defined as:
 
 $$\text{Output Width} = \text{WIDTH} + N = 8 + 4 = 12 \text{ bits}$$
 
-$2^{12} = 4096 > 4080$, guaranteeing that the accumulator **never overflows under any worst-case input vector**.
+Because $2^{12} = 4096 > 4080$, the 12-bit output register guarantees that the accumulator does not overflow under any input vector for the default $4 \times 4$, 8-bit configuration.
+
+> [!NOTE]
+> **Output Bit-Width Generalization**:
+> The formula `WIDTH + N` evaluates correctly to 12 bits for $N = 4, \text{WIDTH} = 8$, but it does not generalize to all choices of $N$. For example, with $N = 3$ ($3 \times 3 = 9$ elements) and $\text{WIDTH} = 8$, the maximum sum is $9 \times 255 = 2295$, which requires $\lceil \log_2(2296) \rceil = 12\text{ bits}$, whereas $\text{WIDTH} + N = 8 + 3 = 11\text{ bits}$ (capacity 2047), causing overflow. The mathematically exact general formula for arbitrary $N$ and $\text{WIDTH}$ is:
+> $$\text{Output Width} = \text{WIDTH} + \lceil \log_2(N \times N) \rceil = \text{WIDTH} + \$clog2(N*N)$$
 
 ---
 
@@ -236,7 +243,7 @@ $2^{12} = 4096 > 4080$, guaranteeing that the accumulator **never overflows unde
 | `A` | Input | $N^2 \times \text{WIDTH}$ (128-bit) | Data | Flattened 1D packed bus representing the $4 \times 4$ template matrix. |
 | `B` | Input | $N^2 \times \text{WIDTH}$ (128-bit) | Data | Flattened 1D packed bus representing the $4 \times 4$ candidate search matrix. |
 | `SAD_out` | Output | $\text{WIDTH} + N$ (12-bit) | Data | Registered final Sum of Absolute Differences value. |
-| `done` | Output | 1 | Flag | Status flag asserted high upon successful output calculation. |
+| `done` | Output | 1 | Flag | Status flag asserted high upon output registration. |
 
 ---
 
@@ -244,7 +251,7 @@ $2^{12} = 4096 > 4080$, guaranteeing that the accumulator **never overflows unde
 
 ### Testbench Setup
 
-The testbench [`Tb_tcl_sdc/sad_tb.v`](Tb_tcl_sdc/sad_tb.v) applies two predefined 16-element ($4 \times 4$) matrices:
+The directed testbench [`Tb_tcl_sdc/sad_tb.v`](Tb_tcl_sdc/sad_tb.v) applies two predefined 16-element ($4 \times 4$) matrices:
 
 $$A = \begin{bmatrix} 1 & 2 & 3 & 4 \\ 5 & 6 & 7 & 8 \\ 9 & 10 & 11 & 12 \\ 13 & 14 & 15 & 16 \end{bmatrix}, \quad B = \begin{bmatrix} 2 & 3 & 4 & 5 \\ 6 & 7 & 8 & 9 \\ 10 & 11 & 12 & 13 \\ 14 & 15 & 16 & 17 \end{bmatrix}$$
 
@@ -263,18 +270,18 @@ In hexadecimal:
 
 ### Simulation Waveforms & Analysis
 
-Simulation was performed using **Cadence SimVision / Incisive Simulator**:
+Simulation was performed using **Cadence SimVision / Incisive Simulator** (and validated with **Icarus Verilog**):
 
 <p align="center">
   <img src="Images/SAD_simulation.png" alt="Cadence SimVision Waveform" width="850"/>
   <br>
-  <em>Figure 3: High-resolution timing waveform showing clk, rst, valid, packed 128-bit inputs A and B, SAD_out = 16 (12'h010), and assertion of the done flag.</em>
+  <em>Figure 3: Timing waveform showing clk, rst, valid, packed 128-bit inputs A and B, SAD_out = 16 (12'h010), and assertion of the done flag.</em>
 </p>
 
 <p align="center">
   <img src="Images/simulation.png" alt="SimVision Environment Capture" width="850"/>
   <br>
-  <em>Figure 4: Full Cadence SimVision verification console and waveform display validating cycle-accurate functional correctness.</em>
+  <em>Figure 4: Full Cadence SimVision verification console and waveform display validating functional correctness.</em>
 </p>
 
 #### Verification Milestones:
@@ -285,11 +292,11 @@ Simulation was performed using **Cadence SimVision / Incisive Simulator**:
 
 ---
 
-## Logic Synthesis (Cadence Genus)
+## Logic Synthesis Results (Cadence Genus — Pre-Layout)
 
 ### Synthesis Constraints & Script
 
-Synthesis was conducted in **Cadence Genus™ Synthesis Solution 21.14** using the following SDC constraints ([`Tb_tcl_sdc/sad.sdc`](Tb_tcl_sdc/sad.sdc)):
+Logic synthesis was conducted in **Cadence Genus™ Synthesis Solution 21.14** using SDC constraints ([`Tb_tcl_sdc/sad.sdc`](Tb_tcl_sdc/sad.sdc)):
 
 ```tcl
 create_clock -name clk -period 2 -waveform {0 1} [get_ports "clk"]
@@ -299,7 +306,7 @@ set_clock_uncertainty 0.01 [get_ports "clk"]
 ```
 
 The synthesis automation script ([`Tb_tcl_sdc/sad.tcl`](Tb_tcl_sdc/sad.tcl)) executes:
-1. Target Library: 90nm slow-corner CMOS standard cell library (`slow.lib`).
+1. Target Library: 90nm slow-corner standard cell library (`slow.lib`).
 2. Elaboration and syntax analysis of `sad.v`.
 3. SDC constraint ingestion ($T_{clk} = 2.0\,\text{ns}$ / 500 MHz).
 4. Generic logic synthesis (`syn_generic -effort medium`).
@@ -325,7 +332,7 @@ The synthesis automation script ([`Tb_tcl_sdc/sad.tcl`](Tb_tcl_sdc/sad.tcl)) exe
 
 ---
 
-### Timing Analysis
+### Post-Synthesis Timing Analysis
 
 Timing was verified under the `slow` operating condition (balanced tree wireload mode). The setup timing check was performed for the register endpoint `done_reg/CK -> D`:
 
@@ -338,35 +345,35 @@ Timing was verified under the `slow` operating condition (balanced tree wireload
 #### Timing Path Breakdown:
 - **Target Clock Period**: 2000 ps (2.0 ns / 500 MHz)
 - **Clock Uncertainty**: 10 ps (0.01 ns)
-- **Setup Time Requirement**: 120 ps
-- **Required Time**: 1870 ps
-- **Data Path Delay**: 448 ps
+- **Setup Time Requirement**: 147 ps
+- **Required Time**: 1843 ps
+- **Data Path Delay**: 420 ps
 - **Setup Slack**: **+1422 ps (+1.422 ns) — TIMING MET**
 
-The positive slack of **+1.422 ns** demonstrates that the design easily exceeds the 500 MHz target frequency and can theoretically support operational clock speeds well in excess of **1 GHz**.
+The design achieved a positive setup slack of **+1422 ps** at the constrained 2.0 ns (500 MHz) target period in Cadence Genus pre-layout synthesis under slow-corner conditions.
 
 ---
 
-### Area Utilization
+### Post-Synthesis Area Utilization
 
-Area synthesis was generated from `sad_area.rep`:
+Cell area synthesis was reported in `sad_area.rep`:
 
 <p align="center">
   <img src="Images/area.jpg" alt="Cadence Genus Area Report" width="750"/>
   <br>
-  <em>Figure 8: Area report (sad_area.rep) detailing total standard cell footprint.</em>
+  <em>Figure 8: Area report (sad_area.rep) detailing standard cell footprint.</em>
 </p>
 
-#### Area Breakdown:
+#### Area Breakdown (Pre-Layout):
 - **Total Cell Area**: **7805.820 µm²**
 - **Net Area**: Pre-layout wireload model estimate
-- **Total Cell Count**: **971 instances** (324 combinational logic gates, 128 sequential storage elements)
+- **Total Cell Count**: **971 instances** (as reported in Genus design browser / report)
 
 ---
 
-### Power Dissipation
+### Post-Synthesis Power Dissipation
 
-Power consumption was characterized at 90nm nominal conditions using `sad_power.rep`:
+Power consumption was characterized at 90nm slow-corner nominal conditions in `sad_power.rep`:
 
 <p align="center">
   <img src="Images/power.jpg" alt="Cadence Genus Power Report" width="750"/>
@@ -390,7 +397,7 @@ Power consumption was characterized at 90nm nominal conditions using `sad_power.
 
 ## Physical Design & Backend Implementation (Cadence Innovus)
 
-Physical design and place-and-route (PnR) was executed in **Cadence Innovus™ Implementation System 21.15**.
+Physical design and place-and-route (PnR) was performed in **Cadence Innovus™ Implementation System 21.15**.
 
 ### Floorplanning & Power Grid
 - **Core Floorplan**: Defined core dimensions with optimized aspect ratio to minimize total wirelength and parasitic capacitance.
@@ -398,11 +405,11 @@ Physical design and place-and-route (PnR) was executed in **Cadence Innovus™ I
 
 ### Placement & Clock Tree Synthesis (CTS)
 - **Standard Cell Placement**: Placement executed with congestion minimization effort to prevent routing hot spots.
-- **Clock Tree Synthesis**: CTS performed using balanced clock buffers. Verified using the **Clock Tree Debugger (CTD)** under `MAX_DELAY` mode to guarantee minimal clock skew and insertion delay across all 128 register endpoints.
+- **Clock Tree Synthesis**: CTS performed using balanced clock buffers. Inspected using the **Clock Tree Debugger (CTD)** under `MAX_DELAY` mode to verify balanced insertion delay across register clock sinks.
 
 ### Detailed Multilayer Routing
 - **Routing Layers**: Multi-layer routing spanning `Metal1` (local standard cell followpins/interconnects), `Metal2`, `Metal3`, and `Metal4` (global routing and clock distribution).
-- **Physical Verification**: DRC and LVS checks completed cleanly with zero design rule or connectivity violations.
+- **Physical Verification**: Geometry and connectivity checks (`verify_geometry`, `verify_connectivity`) run inside Innovus.
 
 ### Layout Visualizations
 
@@ -426,26 +433,37 @@ Physical design and place-and-route (PnR) was executed in **Cadence Innovus™ I
 
 ---
 
-## Synthesis & Implementation Summary Table
+## Post-Synthesis & Implementation Summary Table
 
-| Metric | Parameter / Value | Unit / Standard |
+| Metric | Parameter / Value | Stage / Source |
 |:---|:---:|:---:|
 | **Design Module** | `SAD` (Sum of Absolute Differences) | Verilog RTL |
 | **Matrix Size ($N \times N$)** | $4 \times 4$ (16 elements) | Parameterized |
 | **Pixel Data Width** | 8 | Bits (0 to 255) |
-| **Target Technology** | TSMC / Foundry 90nm Standard Cell | Digital CMOS (`slow.lib`) |
+| **Target Technology Library** | 90 nm standard-cell library (`slow.lib`) | Digital CMOS |
 | **Target Clock Period ($T_{clk}$)** | 2.0 | ns |
 | **Target Clock Frequency** | 500 | MHz |
-| **Worst-Case Slack (Setup)** | **+1422 (+1.422 ns)** | ps (MET) |
-| **Total Standard Cells** | 971 | Leaf cells |
-| **Combinational Gates** | 324 | Gates |
-| **Sequential Elements** | 128 | Flip-Flops |
-| **Total Cell Area** | 7805.820 | µm² |
-| **Static Leakage Power** | 35.99 | µW |
-| **Dynamic Power (Internal + Switching)** | 3.050 | mW |
-| **Total Power Consumption** | **3.086** | mW |
+| **Worst-Case Setup Slack** | **+1422 ps (+1.422 ns)** | Post-Synthesis (Genus, slow corner) |
+| **Total Standard Cells** | 971 | Post-Synthesis (Genus Leaf cells) |
+| **Combinational Gates** | 324 | Genus Synthesis Report |
+| **Sequential Elements** | 128 | Genus Synthesis Report |
+| **Total Cell Area** | 7805.820 | µm² (Post-Synthesis, Genus) |
+| **Static Leakage Power** | 35.99 | µW (Post-Synthesis, Genus) |
+| **Dynamic Power (Internal + Switching)** | 3.050 | mW (Post-Synthesis, Genus) |
+| **Total Power Consumption** | **3.086** | mW (Post-Synthesis, Genus) |
 | **Physical Design Tool** | Cadence Innovus 21.15 | ASIC Backend PnR |
-| **Routing Metal Layers** | Metal1 to Metal4 | Interconnect |
+| **Routing Metal Layers** | Metal1 to Metal4 | Innovus Detailed Route |
+
+*Note: Timing, area, and power metrics are pre-layout post-synthesis results from Cadence Genus using the slow-corner wireload model. Layout and routing were completed in Cadence Innovus.*
+
+---
+
+## Known Limitations
+
+1. **Directed Single-Vector Verification**: The testbench (`sad_tb.v`) is a directed testbench that applies a single test vector and displays the output using `$display`. It does not include automated pass/fail assertions or randomized test vectors for extensive corner-case validation.
+2. **Pre-Layout Metrics**: Reported timing (+1422 ps setup slack), cell area (7805.820 µm²), and power dissipation (3.086 mW) are post-synthesis results from Cadence Genus based on standard-cell library models and a statistical wireload model, rather than post-route SPEF back-annotated parasitic extractions.
+3. **Wireload Model Estimation**: Interconnect delays in synthesis were modeled with a default enclosed wireload model (`slow (balanced_tree)`). Actual post-route net delays will depend on physical wire lengths and parasitic capacitances.
+4. **Parameterization Bit-Width Formula**: In `sad.v`, the output port width uses `WIDTH + N`, which is correct for the default $4 \times 4$ / 8-bit configuration (12 bits), but requires `WIDTH + $clog2(N*N)` for arbitrary matrix dimensions $N$.
 
 ---
 
@@ -471,7 +489,7 @@ Sad_Algorithm_Cadence/
 ├── Tb_tcl_sdc/
 │   ├── sad.sdc                          # Synopsys Design Constraints (SDC) file (500 MHz)
 │   ├── sad.tcl                          # Cadence Genus synthesis automation script
-│   └── sad_tb.v                         # Self-checking behavioral verification testbench
+│   └── sad_tb.v                         # Directed behavioral verification testbench
 ├── SAD_simulation.png                   # Root-level simulation waveform reference
 ├── VLSI_Project_SAD.docx                # Academic Mini-Project Report document
 ├── .gitignore                           # Git ignore rules for EDA tools and OS metadata
@@ -526,16 +544,16 @@ innovus
 # In Innovus command terminal:
 # 1. Import Netlist (netlist.v) and SDC (block.sdc)
 # 2. Specify LEF files and power nets (VDD, VSS)
-# 3. Floorplan -> Power Planning -> Placement -> CTS -> Detailed Route -> Verify DRC/LVS
+# 3. Floorplan -> Power Planning -> Placement -> CTS -> Detailed Route -> Verify Geometry / Connectivity
 ```
 
 ---
 
 ## Future Improvements
 
-1. **Pipelined Reduction Tree**: Pipeline the multi-operand adder tree into $\log_2(N^2)$ balanced register stages to boost maximum operational frequency into multi-gigahertz throughput.
-2. **2D Systolic Streaming Array**: Replace packed-vector parallel inputs with a 2D line-buffer streaming systolic array for direct real-time processing of 1080p / 4K UHD video streams.
-3. **Integrated Clock Gating (ICG)**: Insert latch-based clock gating cells to deactivate adder banks during idle cycles when `valid == 0`, reducing dynamic switching power by up to 70%.
+1. **Pipelined Reduction Tree**: Pipeline the multi-operand adder tree into $\log_2(N^2)$ balanced register stages to boost operational frequency into higher throughput regimes.
+2. **2D Systolic Streaming Array**: Replace packed-vector parallel inputs with a 2D line-buffer streaming systolic array for direct real-time processing of high-definition video streams.
+3. **Integrated Clock Gating (ICG)**: Insert latch-based clock gating cells to deactivate adder banks during idle cycles when `valid == 0`, reducing dynamic switching power.
 
 ---
 
