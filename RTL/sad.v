@@ -11,18 +11,20 @@ module SAD #(parameter N = 4, parameter WIDTH = 8)(
 );
 
     integer i;
-    reg [WIDTH-1:0] A_matrix [0:N*N-1];  // Unpacked array inside module
-    reg [WIDTH-1:0] B_matrix [0:N*N-1];  // Unpacked array inside module
+    reg [WIDTH-1:0] a_elem;
+    reg [WIDTH-1:0] b_elem;
     reg [WIDTH:0] diff;
     reg [WIDTH+N-1:0] sum;
 
-    // Combinational logic for SAD computation
+    // Combinational logic for SAD computation using direct indexed part-selects.
+    // Eliminates module-level unpacked reg arrays (A_matrix, B_matrix) assigned
+    // inside always @(*), preventing lint warnings or risks of latch inference.
     always @(*) begin
         sum = 0;
         for (i = 0; i < N*N; i = i + 1) begin
-            A_matrix[i] = A[i*WIDTH +: WIDTH];  // Extract elements
-            B_matrix[i] = B[i*WIDTH +: WIDTH];  // Extract elements
-            diff = (A_matrix[i] > B_matrix[i]) ? (A_matrix[i] - B_matrix[i]) : (B_matrix[i] - A_matrix[i]);
+            a_elem = A[i*WIDTH +: WIDTH];
+            b_elem = B[i*WIDTH +: WIDTH];
+            diff = (a_elem > b_elem) ? (a_elem - b_elem) : (b_elem - a_elem);
             sum = sum + diff;
         end
     end
@@ -34,11 +36,8 @@ module SAD #(parameter N = 4, parameter WIDTH = 8)(
             done <= 0;
         end else if (valid) begin
             SAD_out <= sum;
-            done <= 1;
+            done <= 1'b1;
         end
     end
 
 endmodule
-
-
-
