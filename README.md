@@ -18,7 +18,7 @@ The digital implementation flow was executed using Cadence EDA suites:
 - **Logic Synthesis & Optimization**: Cadence Genus™ Synthesis Solution 21.14 (targeting a 90nm standard-cell digital library: `slow.lib`)
 - **Physical Design (PnR)**: Cadence Innovus™ Implementation System 21.15 (Floorplanning, Power Distribution Network, Placement, Clock Tree Synthesis, and Detailed Routing)
 
-At a constrained clock period of **2.0 ns (500 MHz)**, post-synthesis (pre-layout) analysis in Cadence Genus verified setup timing closure with a positive slack of **+1422 ps**, consuming **7805.820 µm²** total cell area and **3.086 mW** total power (modeled using the slow-corner balanced-tree wireload model).
+At a constrained clock period of **2.0 ns (500 MHz)**, post-synthesis (pre-layout) analysis in Cadence Genus achieved a setup slack of **+1422 ps** (+1.42 ns) at the 2.0 ns constraint, consuming **7805.820 µm²** total cell area and **3.086 mW** total power (modeled using the slow-corner balanced-tree wireload model).
 
 ---
 
@@ -339,7 +339,7 @@ Timing was verified under the `slow` operating condition (balanced tree wireload
 <p align="center">
   <img src="Images/Timing.jpg" alt="Cadence Genus Timing Report" width="750"/>
   <br>
-  <em>Figure 7: Synthesis timing report (sad_timing.rep) verifying setup timing closure.</em>
+  <em>Figure 7: Synthesis timing report (sad_timing.rep) showing post-synthesis setup slack of +1422 ps at the 2.0 ns constraint.</em>
 </p>
 
 #### Timing Path Breakdown:
@@ -350,7 +350,7 @@ Timing was verified under the `slow` operating condition (balanced tree wireload
 - **Data Path Delay**: 420 ps
 - **Setup Slack**: **+1422 ps (+1.422 ns) — TIMING MET**
 
-The design achieved a positive setup slack of **+1422 ps** at the constrained 2.0 ns (500 MHz) target period in Cadence Genus pre-layout synthesis under slow-corner conditions.
+The design achieved a post-synthesis setup slack of **+1422 ps** at the 2.0 ns constraint, from Genus under slow-corner conditions.
 
 ---
 
